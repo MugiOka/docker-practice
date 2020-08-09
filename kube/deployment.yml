@@ -1,0 +1,61 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: chiquita
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: chiquita
+    spec:
+      containers:
+        - image: gcr.io/chiquita-285913/chiquita-gke:1.0.0
+          imagePullPolicy: Always
+          name: web
+          env:
+            - name: POSTGRESQL_HOST
+              value: 127.0.0.1
+            - name: POSTGRESQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: cloudsql-password
+                  key: username
+            - name: POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cloudsql-password
+                  key: password
+            - name: SECRET_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: rails
+                  key: secret-key-base
+            - name: RAILS_ENV
+              value: production
+            - name: RACK_ENV
+              value: production
+            - name: RAILS_SERVE_STATIC_FILES
+              value: 'true'
+          ports:
+            - containerPort: 3000
+              name: chiquita
+          command: ["bundle", "exec", "rails", "server", "-p", "3000", "-b", "0.0.0.0"]
+        - image: b.gcr.io/cloudsql-docker/gce-proxy:1.17
+          name: cloudsql-proxy
+          command: ["/cloud_sql_proxy",
+                    "-instances=chiquita-285913:asia-northeast1:chiquita=tcp:5432",
+                    "-credential_file=/secrets/cloudsql/credentials.json"]
+          volumeMounts:
+            - name: cloudsql-oauth-credentials
+              mountPath: /secrets/cloudsql
+              readOnly: true
+            - name: ssl-certs
+              mountPath: /etc/ssl/certs
+      volumes:
+        - name: cloudsql-oauth-credentials
+          secret:
+            secretName: cloudsql-oauth-credentials
+        - name: ssl-certs
+          hostPath:
+            path: /etc/ssl/certs
